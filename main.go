@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"mtrace/trace"
 	"os"
 	"time"
 
@@ -18,6 +19,13 @@ import (
 	"github.com/micro/go-micro/service/grpc"
 	bk "github.com/micro/go-plugins/broker/grpc"
 	"github.com/micro/go-plugins/registry/etcdv3"
+
+	"github.com/opentracing/opentracing-go"
+	zipkinot "github.com/openzipkin-contrib/zipkin-go-opentracing"
+	"github.com/openzipkin/zipkin-go"
+	rep "github.com/openzipkin/zipkin-go/reporter"
+	zipkinhttp "github.com/openzipkin/zipkin-go/reporter/http"
+	wrapperTrace "github.com/micro/go-plugins/wrapper/trace/opencensus"
 )
 
 //学生服务管理实现
@@ -65,8 +73,35 @@ func KaelReqWrapper(fn server.HandlerFunc) server.HandlerFunc {
 	}
 }
 
+func InitTracer(zipkinURL string, hostPort string, serviceName string) rep.Reporter {
+	// set up a span reporter
+	reporter := zipkinhttp.NewReporter(zipkinURL)
+	//defer reporter.Close()
+
+	// create our local service endpoint
+	endpoint, err := zipkin.NewEndpoint(serviceName, hostPort)
+	if err != nil {
+		log.Fatalf("unable to create local endpoint: %+v\n", err)
+	}
+
+	// initialize our tracer
+	nativeTracer, err := zipkin.NewTracer(reporter, zipkin.WithLocalEndpoint(endpoint))
+	if err != nil {
+		log.Fatalf("unable to create tracer: %+v\n", err)
+	}
+
+	// use zipkin-go-opentracing to wrap our tracer
+	tracer := zipkinot.Wrap(nativeTracer)
+
+	// optionally set as Global OpenTracing tracer instance
+	opentracing.SetGlobalTracer(tracer)
+
+	return reporter
+}
+
 const (
 	ServiceName = "student_service"
+	ZinkUrl     = "http://localhost:9411/api/v2/spans"
 )
 
 func main() {
@@ -77,6 +112,11 @@ func main() {
 		}
 	})
 
+	hostPort, _ := os.Hostname()
+
+	reporter := InitTracer(ZinkUrl, hostPort, ServiceName)
+	defer reporter.Close()
+
 	//创建一个新的服务对象实例
 	service := grpc.NewService(
 		micro.Name(ServiceName),
@@ -86,6 +126,8 @@ func main() {
 		micro.RegisterInterval(15*time.Second),
 		micro.Version("v1.0.0"),
 		micro.WrapHandler(KaelReqWrapper, ratelimit.NewHandlerWrapper(2)),
+		micro.WrapHandler(trace.ServerWrapper),
+		micro.WrapClient(wrapperTrace.NewClientWrapper()),
 	)
 
 	//服务初始化
