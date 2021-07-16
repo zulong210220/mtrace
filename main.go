@@ -20,12 +20,12 @@ import (
 	bk "github.com/micro/go-plugins/broker/grpc"
 	"github.com/micro/go-plugins/registry/etcdv3"
 
+	wrapperTrace "github.com/micro/go-plugins/wrapper/trace/opencensus"
 	"github.com/opentracing/opentracing-go"
 	zipkinot "github.com/openzipkin-contrib/zipkin-go-opentracing"
 	"github.com/openzipkin/zipkin-go"
 	rep "github.com/openzipkin/zipkin-go/reporter"
 	zipkinhttp "github.com/openzipkin/zipkin-go/reporter/http"
-	wrapperTrace "github.com/micro/go-plugins/wrapper/trace/opencensus"
 )
 
 //学生服务管理实现
@@ -101,7 +101,8 @@ func InitTracer(zipkinURL string, hostPort string, serviceName string) rep.Repor
 
 const (
 	ServiceName = "student_service"
-	ZinkUrl     = "http://localhost:9411/api/v2/spans"
+	//ZinkUrl     = "http://localhost:9411/api/v2/spans"
+	ZinkUrl = "http://zipkin.knowbox.cn/api/v2/spans"
 )
 
 func main() {
